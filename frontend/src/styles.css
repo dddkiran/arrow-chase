@@ -1,0 +1,448 @@
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --panel-2: #1c232d;
+  --line: #2a3340;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #f5b700;
+  --accent-soft: rgba(245, 183, 0, 0.18);
+  --win: #2ecc71;
+  --loss: #ff5d5d;
+  --tile: #1f2733;
+  --tile-hover: #2a3546;
+  --radius: 10px;
+  color-scheme: dark;
+  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+h1,
+h2 {
+  margin: 0;
+}
+
+h2 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 0.6rem;
+}
+
+.loading {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  text-align: center;
+}
+
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+header h1 {
+  font-size: 1.4rem;
+}
+
+.tag {
+  font-size: 0.7rem;
+  vertical-align: middle;
+  background: var(--loss);
+  color: #fff;
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin-left: 6px;
+  animation: pulse 1.6s infinite;
+}
+
+.stats {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.balance {
+  color: var(--text);
+  font-weight: 700;
+  font-size: 1.15rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.conn.open {
+  color: var(--win);
+}
+
+.conn.reconnecting,
+.conn.connecting {
+  color: var(--accent);
+}
+
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  main {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- board ---- */
+
+.board {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 4px;
+  width: 100%;
+  /* fit the whole board on screen; the grid is square by default */
+  max-width: min(720px, 100%, calc(100vh - 110px));
+}
+
+.tile {
+  position: relative;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--tile);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0;
+  min-width: 0;
+  overflow: hidden;
+  transition: background-color 0.2s, opacity 0.3s;
+}
+
+.tile:hover:not(:disabled) {
+  background: var(--tile-hover);
+  border-color: var(--accent);
+}
+
+.tile:disabled {
+  cursor: not-allowed;
+}
+
+.tile .live {
+  font-size: clamp(0.65rem, 1.6vw, 0.95rem);
+  font-weight: 600;
+}
+
+.tile.closed {
+  opacity: 0.35;
+}
+
+.tile.trail-0 { background: rgba(245, 183, 0, 0.32); }
+.tile.trail-1 { background: rgba(245, 183, 0, 0.24); }
+.tile.trail-2 { background: rgba(245, 183, 0, 0.17); }
+.tile.trail-3 { background: rgba(245, 183, 0, 0.11); }
+.tile.trail-4 { background: rgba(245, 183, 0, 0.07); }
+.tile.trail-5 { background: rgba(245, 183, 0, 0.04); }
+
+.tile.has-bet {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  opacity: 1;
+}
+
+.tile .lock {
+  font-size: clamp(0.55rem, 1.2vw, 0.72rem);
+  background: var(--accent);
+  color: #111;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 1px 4px;
+  white-space: nowrap;
+}
+
+.tile .lock.pending {
+  background: transparent;
+  color: var(--accent);
+  animation: pulse 0.8s infinite;
+}
+
+.tile .steps-left {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 0.6rem;
+  color: var(--accent);
+}
+
+.tile.flash-win {
+  animation: flash-win 1.2s ease-out;
+}
+
+.tile.flash-loss {
+  animation: flash-loss 1.2s ease-out;
+}
+
+/*
+ * Board padding and tile gap are both 4px. Starting the layer at the padding edge and running it to the outer
+ * edge makes its size (content + one gap), so 1/cols of it is exactly one tile pitch and translate(col * 100%)
+ * lands on the tile.
+ */
+.arrow-layer {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.arrow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 0 4px 4px 0;
+  display: grid;
+  place-items: center;
+  transition-property: transform;
+  transition-timing-function: linear;
+}
+
+.arrow-glyph {
+  width: 70%;
+  height: 70%;
+  fill: var(--accent);
+  filter: drop-shadow(0 0 6px rgba(245, 183, 0, 0.9));
+  transition: transform 0.25s ease;
+}
+
+.legend {
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+  max-width: 720px;
+}
+
+/* ---- side panels ---- */
+
+aside {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.stake label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.stake input {
+  width: 100%;
+  font: inherit;
+  font-size: 1.2rem;
+  font-variant-numeric: tabular-nums;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.stake input[aria-invalid='true'] {
+  border-color: var(--loss);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.chip {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.chip.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.hint {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.hint.error {
+  color: var(--loss);
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.bets ul,
+.feed ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bet {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  font-size: 0.85rem;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--panel-2);
+  border-left: 3px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.bet .status {
+  grid-column: 1 / -1;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.bet.open {
+  border-left-color: var(--accent);
+}
+
+.bet.pending {
+  border-left-color: var(--muted);
+  opacity: 0.8;
+}
+
+.bet.won {
+  border-left-color: var(--win);
+}
+
+.bet.won .status {
+  color: var(--win);
+}
+
+.bet.lost {
+  border-left-color: var(--loss);
+}
+
+.feed li {
+  font-size: 0.85rem;
+}
+
+/* ---- toasts ---- */
+
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 10;
+  max-width: calc(100vw - 32px);
+}
+
+.toast {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  font-size: 0.9rem;
+  animation: slide-in 0.2s ease-out;
+}
+
+.toast.win {
+  border-color: var(--win);
+  color: var(--win);
+}
+
+.toast.loss {
+  color: var(--muted);
+}
+
+.toast.error {
+  border-color: var(--loss);
+  color: var(--loss);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes flash-win {
+  0% {
+    background: var(--win);
+  }
+}
+
+@keyframes flash-loss {
+  0% {
+    background: var(--loss);
+  }
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+}

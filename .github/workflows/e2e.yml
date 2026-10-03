@@ -1,0 +1,52 @@
+name: e2e
+
+# The whole slice in a real browser: backend + frontend running together. Runs on any change to either app.
+on:
+  push:
+    branches: [main]
+    paths: ['backend/**', 'frontend/**', '.github/workflows/e2e.yml']
+  pull_request:
+    paths: ['backend/**', 'frontend/**', '.github/workflows/e2e.yml']
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Start backend
+        working-directory: backend
+        run: |
+          ./mvnw -B -q -DskipTests package
+          java -jar target/*.jar > backend.log 2>&1 &
+          curl -s --retry 60 --retry-connrefused --retry-delay 1 http://localhost:8080/actuator/health
+
+      - name: Run Playwright
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run e2e
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: |
+            frontend/test-results
+            backend/backend.log

@@ -1,0 +1,33 @@
+server:
+  port: ${PORT:8080}        # Cloud Run injects PORT
+  shutdown: graceful        # finish in-flight work on SIGTERM
+
+app:
+  # Browser origins allowed to open the WebSocket. Comma-separated; patterns allowed.
+  # On Cloud Run set ALLOWED_ORIGINS to the frontend service URL.
+  allowed-origins: ${ALLOWED_ORIGINS:http://localhost:*,http://127.0.0.1:*}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+game:
+  rows: 8
+  cols: 8
+  step-millis: 700          # arrow moves one block per step
+  bet-window-steps: 10      # a bet covers the next 10 moves (~7 s)
+  straight-weight: 0.6      # relative odds of going straight vs. turning
+  turn-weight: 0.2
+  rtp: 0.95                 # target return-to-player before jitter
+  jitter: 0.03              # +/-3% live wobble on quotes; rtp * (1 + jitter) must stay < 1
+  min-multiplier-x100: 105  # blocks quoting below 1.05x are closed
+  max-multiplier-x100: 5000 # 50x cap
+  min-hit-probability: 0.02 # blocks the arrow almost certainly cannot reach are closed
+  min-stake-cents: 10
+  max-stake-cents: 10000
+  starting-balance-cents: 100000
+  max-open-bets-per-player: 20
+  trail-length: 6
+  seed:                     # set a number to replay a deterministic game

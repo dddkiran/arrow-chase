@@ -1,0 +1,7 @@
+* text=auto
+# Shell scripts must keep LF or they break in Linux containers and CI.
+*.sh text eol=lf
+backend/mvnw text eol=lf
+*.cmd text eol=crlf
+*.png binary
+*.jar binary

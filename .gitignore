@@ -1,0 +1,10 @@
+node_modules/
+backend/target/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+.idea/
+.vscode/
+*.iml
+# Local output of the IDE's Java upgrade tool, not part of the project
+.github/modernize/

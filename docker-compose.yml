@@ -1,0 +1,15 @@
+# Production-like local run of the two Cloud Run images (needs Docker). Open http://localhost:8081
+# For day-to-day development use `npm run dev` instead (hot reload, no Docker).
+services:
+  backend:
+    build: ./backend
+    ports: ['8080:8080']
+    environment:
+      ALLOWED_ORIGINS: 'http://localhost:*'
+
+  frontend:
+    build: ./frontend
+    ports: ['8081:8080']
+    environment:
+      BACKEND_URL: 'http://backend:8080'
+    depends_on: [backend]
