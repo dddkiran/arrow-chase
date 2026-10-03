@@ -1,20 +1,32 @@
 import { defineConfig } from '@playwright/test';
 
 /**
- * Full-stack end-to-end tests: real browser -> real frontend (Vite) -> real backend (Spring Boot). Nothing is
- * mocked. Playwright starts both apps if they are not already running, and reuses them if they are
+ * Functional tests of the running system, one folder per app:
+ *   backend/   black-box tests of the WebSocket API (no browser)
+ *   frontend/  the game in a real browser, through the real frontend, against the real backend
+ * Nothing is mocked. Playwright starts both apps if they are not already running and reuses them if they are
  * (e.g. under `npm run dev`).
  */
 export default defineConfig({
-  testDir: './tests',
   timeout: 30_000,
   forbidOnly: !!process.env.CI,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
-  use: {
-    baseURL: 'http://localhost:5173',
-    screenshot: 'only-on-failure',
-    trace: 'retain-on-failure',
-  },
+  projects: [
+    {
+      name: 'backend',
+      testDir: './backend',
+    },
+    {
+      name: 'frontend',
+      testDir: './frontend',
+      use: {
+        browserName: 'chromium',
+        baseURL: 'http://localhost:5173',
+        screenshot: 'only-on-failure',
+        trace: 'retain-on-failure',
+      },
+    },
+  ],
   webServer: [
     {
       name: 'backend',

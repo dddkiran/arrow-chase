@@ -12,7 +12,9 @@
     "test:web": "npm --prefix frontend test",
     "build": "node scripts/mvnw.mjs -B -q -DskipTests package && npm --prefix frontend run build",
     "e2e": "npm --prefix e2e test",
-    "e2e:install": "npm --prefix e2e run install-browsers"
+    "e2e:install": "npm --prefix e2e run install-browsers",
+    "e2e:backend": "npm --prefix e2e run test:backend",
+    "e2e:frontend": "npm --prefix e2e run test:frontend"
   },
   "devDependencies": {
     "concurrently": "^10.0.5"

@@ -73,4 +73,4 @@ docker compose up --build    # game at http://localhost:8081, API on :8080
 
 ## CI
 
-`.github/workflows/` has one workflow per app, each triggered only by changes in its own folder. Each runs that app's tests, then builds its Cloud Run image. A third workflow, `e2e`, runs the full-stack Playwright suite in [e2e/](../e2e/) whenever either app or the suite changes. Deployment is deliberately not automated yet. The next step would be a deploy job using Workload Identity Federation (no service-account keys), gated on `main` and a manual approval for production.
+`.github/workflows/` has one workflow per app, each triggered only by changes in its own folder. Each runs that app's tests, then builds its Cloud Run image. Those are unit tests. A third workflow, `e2e`, runs the functional tests in [e2e/](../e2e/) (backend API tests and browser tests against both running apps) whenever either app or the suite changes. Deployment is deliberately not automated yet. The next step would be a deploy job using Workload Identity Federation (no service-account keys), gated on `main` and a manual approval for production.

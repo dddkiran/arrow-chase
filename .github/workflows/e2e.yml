@@ -1,6 +1,6 @@
 name: e2e
 
-# Full stack in a real browser: backend + frontend running together, nothing mocked.
+# Functional tests of the running system (e2e/backend: WebSocket API, e2e/frontend: real browser), nothing mocked.
 # Runs on any change to either app or to the e2e suite itself.
 on:
   push:

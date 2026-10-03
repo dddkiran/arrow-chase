@@ -100,16 +100,18 @@ Things worth trying: bet on several blocks at once, refresh the page in the midd
 
 ### Test layers
 
+The rule: **each app's own folder holds unit tests** (fast, no running system). **`e2e/` holds functional tests of the running system, one folder per app.** Nothing in `e2e/` is mocked.
+
 | Layer | Where | What is real | Count |
 |---|---|---|---|
-| Backend unit, property and simulation | `backend/src/test/.../game/` | Pure engine; path and quotes scripted or seeded | 34 |
-| Backend integration (API level) | `backend/src/test/.../ws/GameWebSocketTest` | Real Spring server and WebSocket client, no browser | 6 |
+| Backend unit, property and simulation | `backend/src/test/` | Pure engine; path and quotes scripted or seeded | 34 |
 | Frontend unit and component | `frontend/src/**/*.test.ts(x)` | Reducer and components, no network | 32 |
-| **Full-stack end-to-end** | `e2e/tests/` | Real browser → real frontend → real backend. **Nothing mocked.** | 2 |
+| **Backend functional** | `e2e/backend/` | Running backend, driven black-box over its public WebSocket API (no browser) | 6 |
+| **Frontend functional (full stack)** | `e2e/frontend/` | Real browser → running frontend → running backend | 2 |
 
 ### Run them
 
-**Unit and integration, everything at once**, from the repository root (after `npm install`):
+**Unit tests, everything at once**, from the repository root (after `npm install`):
 
 ```bash
 npm test
@@ -117,7 +119,7 @@ npm test
 
 This runs the backend suite, then the frontend suite. Each prints the expected output shown below. To run one app's tests on its own:
 
-**Backend: 40 tests** (engine rules, path and pricing properties, a 20,000-step simulation, and real WebSocket tests including origin checks)
+**Backend: 34 tests** (engine rules, path and pricing properties, and a 20,000-step simulation)
 
 ```bash
 cd backend
@@ -127,7 +129,7 @@ cd backend
 Expected (takes about 15 s after the first build):
 
 ```
-[INFO] Tests run: 40, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 34, Failures: 0, Errors: 0, Skipped: 0
 [INFO] BUILD SUCCESS
 ```
 
@@ -148,14 +150,21 @@ Expected:
 
 Type check and production build: `npm run build` (should finish with no errors).
 
-**End-to-end (2 tests)** in [e2e/](e2e/). These play one full bet in a real browser (stake → lock-in → win or miss), and check that two separate players see the same arrow. Playwright **starts the backend and frontend itself**, or reuses them if `npm run dev` is already running. From the repository root:
+**Functional tests (8)** in [e2e/](e2e/):
+
+- **[e2e/backend/](e2e/backend/)** (6): join, bet, lock-in and settlement over the WebSocket API; retries not charged twice; reconnect restores state; invalid player rejected; untrusted origins refused and allowed ones accepted.
+- **[e2e/frontend/](e2e/frontend/)** (2): one full bet in a real browser (stake → lock-in → win or miss), and two separate players seeing the same arrow.
+
+Playwright **starts the backend and frontend itself**, or reuses them if `npm run dev` is already running. From the repository root:
 
 ```bash
-npm run e2e:install   # one-time: downloads Chromium (~115 MB)
-npm run e2e
+npm run e2e:install   # one-time: downloads Chromium (~115 MB); only the frontend tests need it
+npm run e2e           # both
+npm run e2e:backend   # backend API tests only (no browser)
+npm run e2e:frontend  # browser tests only
 ```
 
-Expected: `2 passed` (about 25 s; the first cold run takes longer while the backend builds). It saves a screenshot to `e2e/test-results/after-settlement.png`. You may see `[vite] ws proxy error: write ECONNABORTED` lines near the end. They're harmless: Playwright closes the browser while the server is still streaming moves.
+Expected: `8 passed` (about 35 s; the first cold run takes longer while the backend builds). The backend tests can also run against a deployed backend: `API_URL=https://<api-url> npm run e2e:backend`. It saves a screenshot to `e2e/test-results/after-settlement.png`. You may see `[vite] ws proxy error: write ECONNABORTED` lines near the end. They're harmless: Playwright closes the browser while the server is still streaming moves.
 
 ## 4. Configuration
 
@@ -185,7 +194,10 @@ backend/                      Java 25, Spring Boot 3.5, plain WebSocket + JSON  
 frontend/                     React 19 + TypeScript + Vite  (own Dockerfile: nginx serves the build, proxies /ws)
   src/game/                   Protocol types, state reducer, WebSocket hook (reconnect + resend)
   src/components/             Board/Tile, stake input, bet list, win feed
-e2e/                          Full-stack Playwright tests (own package; starts both apps itself)
+e2e/                          Functional tests of the running system (own package; starts both apps itself)
+  backend/                    Black-box WebSocket API tests (no browser)
+  frontend/                   Browser tests through the real frontend
+  support/                    Shared protocol-level test client
 docs/                         Architecture, AI note, estimate, deployment
 ```
 

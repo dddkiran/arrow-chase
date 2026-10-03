@@ -5,10 +5,15 @@
   "type": "module",
   "scripts": {
     "test": "playwright test",
+    "test:backend": "playwright test --project=backend",
+    "test:frontend": "playwright test --project=frontend",
     "install-browsers": "playwright install chromium",
     "report": "playwright show-report"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0"
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.4",
+    "@types/ws": "^8.18.2",
+    "ws": "^8.22.0"
   }
 }

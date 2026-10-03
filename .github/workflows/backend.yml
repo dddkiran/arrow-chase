@@ -24,7 +24,7 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - run: ./mvnw -B test
+      - run: ./mvnw -B test # unit tests; API-level functional tests run in e2e.yml
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4
