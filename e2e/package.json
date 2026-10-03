@@ -1,0 +1,14 @@
+{
+  "name": "arrow-chase-e2e",
+  "private": true,
+  "description": "Full-stack end-to-end tests (browser + frontend + backend, nothing mocked).",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "install-browsers": "playwright install chromium",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

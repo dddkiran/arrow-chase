@@ -1,12 +1,13 @@
 name: e2e
 
-# The whole slice in a real browser: backend + frontend running together. Runs on any change to either app.
+# Full stack in a real browser: backend + frontend running together, nothing mocked.
+# Runs on any change to either app or to the e2e suite itself.
 on:
   push:
     branches: [main]
-    paths: ['backend/**', 'frontend/**', '.github/workflows/e2e.yml']
+    paths: ['backend/**', 'frontend/**', 'e2e/**', 'scripts/mvnw.mjs', '.github/workflows/e2e.yml']
   pull_request:
-    paths: ['backend/**', 'frontend/**', '.github/workflows/e2e.yml']
+    paths: ['backend/**', 'frontend/**', 'e2e/**', 'scripts/mvnw.mjs', '.github/workflows/e2e.yml']
 
 concurrency:
   group: e2e-${{ github.ref }}
@@ -26,27 +27,25 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: |
+            frontend/package-lock.json
+            e2e/package-lock.json
 
-      - name: Start backend
-        working-directory: backend
-        run: |
-          ./mvnw -B -q -DskipTests package
-          java -jar target/*.jar > backend.log 2>&1 &
-          curl -s --retry 60 --retry-connrefused --retry-delay 1 http://localhost:8080/actuator/health
-
-      - name: Run Playwright
+      - run: npm ci
         working-directory: frontend
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
-          npm run e2e
+      - run: npm ci && npx playwright install --with-deps chromium
+        working-directory: e2e
+      # Playwright starts backend and frontend itself (see e2e/playwright.config.ts).
+      - run: npm test
+        working-directory: e2e
+        env:
+          CI: 'true'
 
-      - name: Upload artifacts
+      - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-results
+          name: e2e-report
           path: |
-            frontend/test-results
-            backend/backend.log
+            e2e/playwright-report
+            e2e/test-results

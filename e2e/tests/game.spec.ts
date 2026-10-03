@@ -1,3 +1,4 @@
+// Full stack, nothing mocked: real browser -> frontend -> backend game engine.
 import { expect, test, type Page } from '@playwright/test';
 
 const balance = async (page: Page) =>

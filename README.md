@@ -98,7 +98,18 @@ Things worth trying: bet on several blocks at once, refresh the page in the midd
 
 ## 3. Run the tests
 
-**Everything at once**, from the repository root (after `npm install`):
+### Test layers
+
+| Layer | Where | What is real | Count |
+|---|---|---|---|
+| Backend unit, property and simulation | `backend/src/test/.../game/` | Pure engine; path and quotes scripted or seeded | 34 |
+| Backend integration (API level) | `backend/src/test/.../ws/GameWebSocketTest` | Real Spring server and WebSocket client, no browser | 6 |
+| Frontend unit and component | `frontend/src/**/*.test.ts(x)` | Reducer and components, no network | 32 |
+| **Full-stack end-to-end** | `e2e/tests/` | Real browser → real frontend → real backend. **Nothing mocked.** | 2 |
+
+### Run them
+
+**Unit and integration, everything at once**, from the repository root (after `npm install`):
 
 ```bash
 npm test
@@ -137,15 +148,14 @@ Expected:
 
 Type check and production build: `npm run build` (should finish with no errors).
 
-**Optional: browser end-to-end (2 tests).** This plays one full bet in a real browser, and checks that two separate players see the same arrow. It needs the **backend running** (`npm run dev`, or terminal 1). It starts Vite itself if it isn't already running.
+**End-to-end (2 tests)** in [e2e/](e2e/). These play one full bet in a real browser (stake → lock-in → win or miss), and check that two separate players see the same arrow. Playwright **starts the backend and frontend itself**, or reuses them if `npm run dev` is already running. From the repository root:
 
 ```bash
-cd frontend
-npx playwright install chromium   # one-time, ~115 MB
-npm run e2e                       # or from the root: npm run e2e
+npm run e2e:install   # one-time: downloads Chromium (~115 MB)
+npm run e2e
 ```
 
-Expected: `2 passed`. It saves a screenshot to `frontend/test-results/after-settlement.png`.
+Expected: `2 passed` (about 25 s; the first cold run takes longer while the backend builds). It saves a screenshot to `e2e/test-results/after-settlement.png`. You may see `[vite] ws proxy error: write ECONNABORTED` lines near the end. They're harmless: Playwright closes the browser while the server is still streaming moves.
 
 ## 4. Configuration
 
@@ -159,7 +169,7 @@ Setting `game.seed` makes the arrow path and quotes repeat exactly, which helps 
 
 ## 5. Project layout
 
-Monorepo: two independently built and deployed apps. The root only holds orchestration (dev runner, CI, deploy script) and docs.
+Monorepo: two independently built and deployed apps. The root holds the cross-app e2e suite, orchestration (dev runner, CI, deploy script) and docs.
 
 ```
 package.json                  Root scripts only: dev / test / build / e2e across both apps
@@ -175,7 +185,7 @@ backend/                      Java 25, Spring Boot 3.5, plain WebSocket + JSON  
 frontend/                     React 19 + TypeScript + Vite  (own Dockerfile: nginx serves the build, proxies /ws)
   src/game/                   Protocol types, state reducer, WebSocket hook (reconnect + resend)
   src/components/             Board/Tile, stake input, bet list, win feed
-  e2e/                        Playwright smoke test
+e2e/                          Full-stack Playwright tests (own package; starts both apps itself)
 docs/                         Architecture, AI note, estimate, deployment
 ```
 
