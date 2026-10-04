@@ -2,42 +2,70 @@
 
 ## 1. What the slice is
 
+### In one paragraph
+
+One server runs **one shared game** for everyone. Every 0.7 seconds it moves the arrow one block, recalculates the multiplier on every block, settles any bets the move decided, and sends the new state to every connected browser. Browsers only **display** that state and **send bets**; they never decide anything. When a player bets, the server records the block's multiplier at that moment (the *lock-in*) and takes the stake. If the arrow enters that block within the next 10 moves, the server pays `stake × locked multiplier`; otherwise the bet is lost.
+
+### The pieces
+
 ```
- Browser (React)                       Server (Spring Boot, one JVM)
- ───────────────                       ──────────────────────────────────────────────────────────
-                     WebSocket /ws     ┌───────────────────┐   queue    ┌──────────────────────┐
-  render board  ◄──── step (1.4/s) ────┤ ClientRegistry    │◄───────────┤ GameLoop             │
-  render bets   ◄──── betLocked ───────┤  fan-out, slow-   │            │  ONE thread          │
-                ◄──── betSettled ──────┤  client eviction  │            │  ticks every 700 ms  │
-  click block   ───── placeBet ───────►│ GameWebSocket-    ├──command──►│  runs bet commands   │
-  (requestId)                          │ Handler: validate │            │          │           │
-                                       └───────────────────┘            │  ┌───────▼────────┐  │
-                                                                        │  │ GameEngine     │  │
-                                                                        │  │ path, quotes,  │  │
-                                                                        │  │ wallets, bets, │  │
-                                                                        │  │ settlement     │  │
-                                                                        │  └────────────────┘  │
-                                                                        └──────────────────────┘
+   Browser (React)                                Server (Spring Boot)
+  ┌─────────────────────┐                 ┌──────────────────────────────────────────────┐
+  │ shows the board,    │  ◄── state ───  │  1. Gateway        2. Game loop   3. Engine   │
+  │ your bets, balance  │                 │     (WebSocket)  ─► (one thread) ─► (rules)   │
+  │                     │  ─── bets ───►  │                                              │
+  └─────────────────────┘    WebSocket    └──────────────────────────────────────────────┘
+       many players                          everything lives in this one process's memory
 ```
 
-**The rules as implemented**
-
-- **Path:** a random walk on an 8×8 grid. Each step the arrow goes straight (60%) or turns left or right (20% each). It never reverses, and at a wall it turns. Each step is drawn when it happens, so there is no precomputed path anyone could leak.
-- **Live multiplier:** for each block, `RTP / P(arrow enters block within the next 10 moves) × (1 ± 3% jitter)`, rounded down to 0.01. `P` is **exact**: a dynamic program over the same Markov chain that drives the arrow, precomputed once for all 256 (cell, heading) states. A Monte Carlo test checks it against the live random walk. Blocks with P < 2% (out of reach), or with a multiplier below 1.05×, are **closed** rather than mispriced.
-- **Lock-in:** the multiplier locked is the server's quote **at the moment the game thread processes the bet**, not the number the player saw. The server confirms with `betLocked`, which carries the locked value.
-- **Settlement:** a bet placed at step *s* covers the arrow's positions at steps *s+1 … s+10*. The first time the arrow enters the block, the bet is WON and pays `stake × locked`. Otherwise it is LOST at step *s+10*. The block the arrow is standing on when you bet doesn't count unless the arrow comes back to it.
-
-**Design decisions that matter**
-
-| Decision | Why | Cost / what it defers |
+| Part | Its one job | Code |
 |---|---|---|
-| **The engine is single-threaded, driven by one game-loop thread (actor model)** | Every bet is strictly before or after a step, so there are no races and no locks. Outbound messages leave in engine order. | Throughput per game is bounded by one core. That's more than enough: a step is about 64 table lookups. |
-| **The engine is pure: no clock, no Spring, randomness injected** | Every rule can be tested exactly with a scripted path. A seed replays a whole game. The engine can later move into another process unchanged. | A little wiring code. |
-| **The path and the pricing share one transition table** | Quotes can't drift away from how the arrow actually behaves. RTP is a property of the code, not a hope. | Changing movement rules changes prices automatically, which is a feature, but it needs a maths sign-off. |
-| **Money in integer cents, multipliers ×100, payout floored** | No floating-point error in settlement on either side of the wire. | None worth mentioning. |
-| **Idempotent `requestId` per player** | The client re-sends unconfirmed bets after a reconnect, and a retry can never double-charge. | Bounded in-memory dedup cache (50k). That needs to become durable (see roadmap). |
-| **A full snapshot on every connect** | Reconnect, refresh and a second tab all converge on server truth. No client-side recovery logic. | Slightly bigger first message (fine). |
-| **Plain WebSocket + JSON, not STOMP/SockJS** | A small, explicit protocol that's easy to read and test. | No broker semantics. We'd add our own pub/sub when we scale out (below). |
+| **Browser** | Draw what the server sends. Send a bet when a block is clicked. Reconnect by itself if the connection drops. | `frontend/src/` |
+| **1. Gateway** | Hold the WebSocket connections, check incoming messages are well-formed, and pass bets on to the game loop. Send each message to the right players. Disconnect clients too slow to keep up. | `backend/.../ws/` |
+| **2. Game loop** | The **only** thread that touches game state. It does two kinds of work, strictly one at a time: a *tick* every 0.7 s, and *bet requests* from the gateway. | `backend/.../app/GameLoop.java` |
+| **3. Engine** | The rules: where the arrow goes, what each block pays, wallets, accepting or rejecting bets, settling them. Plain Java with no framework, network or clock, so it can be tested exactly. | `backend/.../game/` |
+
+### The life of one bet
+
+1. **The board is live.** On every tick the engine moves the arrow, settles bets, and re-prices all 64 blocks. The gateway sends this as a `step` message to every player (about 1.4 per second).
+2. **A player clicks a block.** The browser sends `placeBet` with the block, the stake and a unique `requestId`, and shows the tile as "locking…".
+3. **The server decides.** The gateway queues the request onto the game loop. Because the loop does one thing at a time, the bet lands cleanly *between* two moves, never in the middle of one. The engine checks that the block is open, the stake is within limits, the player can afford it, and they are under the cap of 20 open bets.
+4. **Lock-in.** If accepted, the engine takes the stake and records the block's current multiplier on the bet. The player gets `betLocked` with that multiplier, and the tile shows 🔒. From now on the live number on the tile no longer matters for this bet. If rejected, the player gets `betRejected` with the reason, and nothing is charged.
+5. **The next 10 moves decide it.** After each move, the engine checks every open bet. If the arrow has just entered the bet's block, the bet is **won** and pays `stake × locked multiplier`. If 10 moves pass without that, the bet is **lost**. Either way the player gets `betSettled` with the result and the new balance, and every player's win feed shows the wins.
+6. **If the connection drops,** the browser reconnects and the server sends a full `welcome` snapshot: board, balance, open and recent bets. Any bet the browser sent but never saw confirmed is re-sent with the **same** `requestId`. The server recognises it and returns the original answer instead of charging twice.
+
+### The rules, precisely
+
+- **How the arrow moves.** Each move goes one block: straight ahead 60% of the time, a left or right turn 20% each. It never reverses, and at a wall it turns. The next move is drawn only when it happens, so there is no stored future path that could leak.
+- **How multipliers are set.** A block's multiplier follows from the chance that the arrow enters it within the next 10 moves. If that chance is 1 in 4, a *fair* payout would be 4×. The game pays 95% of fair, so 3.80×. That 95% is the **return to player (RTP)**; the other 5% is the house margin. A small ±3% wobble is added each move so the board visibly changes, and results are rounded down to 0.01.
+  - The chance is **calculated exactly** from the same movement rules that move the arrow, not estimated. A test checks the calculation against 200,000 simulated walks, and a 900,000-bet simulation returned 94.8% to players.
+  - **Closed blocks.** A block is shown as closed (–) and can't be bet on if the arrow almost certainly can't reach it (under 2% chance), or if it's so likely to be hit that the multiplier would drop below 1.05×. That's more honest than showing a price that isn't real.
+- **What gets locked.** The multiplier the server holds **when it processes the bet**. Usually that's the number the player clicked. If the arrow moved in the instant between click and arrival, it's the next move's price, and the confirmation shows the actual locked value. (Whether to reject the bet instead when the price moved is a product decision; see §3.)
+- **Which block counts.** Only moves *after* the bet count. The block the arrow is standing on when you bet only wins if the arrow comes back to it within the window.
+
+### Messages
+
+| Direction | Message | When |
+|---|---|---|
+| server → one player | `welcome` | On connect: board, rules, balance, open and recent bets |
+| server → everyone | `step` | Every move: arrow position and trail, all multipliers, players online, recent wins |
+| player → server | `placeBet` | Block, stake (in cents) and a unique `requestId` |
+| server → that player | `betLocked` / `betRejected` | The answer to `placeBet`: the locked bet and new balance, or the reason it was refused |
+| server → that player | `betSettled` | The bet won or lost, with payout and new balance |
+
+All money is sent as **whole cents** and multipliers as **whole hundredths** (245 = 2.45×), so no floating-point rounding happens anywhere.
+
+### Design decisions that matter
+
+| Decision | Why | What it costs or defers |
+|---|---|---|
+| **One thread owns all game state** (the game loop) | Bets and moves happen strictly one after another, so there are no race conditions and no locks to get wrong. Messages leave in the order things happened. | One game can use only one CPU core. That's plenty: a move costs about 64 lookups. |
+| **The rules engine has no framework, clock or hidden randomness** | Every rule is tested exactly with a scripted arrow path. A fixed seed replays a whole game. The engine can move to another process unchanged. | A little wiring code. |
+| **The arrow and the prices use the same movement rules** | Prices can't drift from how the arrow really moves, so the 95% return is built in and testable. | Changing the movement changes the prices too. That's correct, but needs a maths sign-off. |
+| **Money as integer cents, payouts rounded down** | No rounding errors in settlement, in Java or in the browser. | None worth mentioning. |
+| **Every bet carries a `requestId`; repeats return the first answer** | A retry after a network blip can never charge twice. | The list of seen requests is in memory (last 50,000). It must become durable before real money (see roadmap). |
+| **A full snapshot on every connect** | Reconnecting, refreshing or opening a second tab all end up showing exactly what the server has. No recovery logic in the browser. | A slightly larger first message. |
+| **Plain WebSocket with JSON messages** (no messaging framework on top) | A small, explicit protocol that's easy to read and test. | No built-in pub/sub. We add our own when scaling out (§2). |
 
 ## 2. How it scales
 
