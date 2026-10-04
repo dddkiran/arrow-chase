@@ -2,7 +2,7 @@
 
 Unit tests live **inside each app** and need nothing running: no server, no browser, no network. They are the fast feedback loop and run on every change in CI. Functional tests of the running system are in [E2E_TESTS.md](E2E_TESTS.md).
 
-Prerequisites: JDK 25 and Node 20+, set up as in [RUN_AND_TEST.md](RUN_AND_TEST.md#1-prerequisites).
+Prerequisites: JDK 25 and Node 20+, set up as in [RUN.md](RUN.md#1-prerequisites).
 
 ## Run everything
 
@@ -94,6 +94,6 @@ npm run build                                           # type check + productio
 
 | Symptom | Fix |
 |---|---|
-| `The backend needs JDK 25 or newer, but … is Java 8` | Install JDK 25 and set `JAVA_HOME`; see [RUN_AND_TEST.md](RUN_AND_TEST.md#1-prerequisites). |
+| `The backend needs JDK 25 or newer, but … is Java 8` | Install JDK 25 and set `JAVA_HOME`; see [RUN.md](RUN.md#1-prerequisites). |
 | `No tests matching pattern` from Maven | Check the `-Dtest` spelling. Quote patterns that contain `*` or `#`. |
 | Frontend tests can't find `vitest` | Run `npm install` at the root, or `npm ci` in `frontend/`. |

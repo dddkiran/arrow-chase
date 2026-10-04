@@ -6,13 +6,13 @@ The server owns the path, the lock-in and settlement. The browser only renders w
 
 ## Documents
 
-**Start here: [docs/RUN_AND_TEST.md](docs/RUN_AND_TEST.md)**, the execution guide (install, run, play, test, expected output).
+**Execution guide:** start with [docs/RUN.md](docs/RUN.md), then run the tests with [docs/UNIT_TESTS.md](docs/UNIT_TESTS.md) and [docs/E2E_TESTS.md](docs/E2E_TESTS.md). Each covers install, commands and expected output.
 
 | Document | What it covers |
 |---|---|
-| [docs/RUN_AND_TEST.md](docs/RUN_AND_TEST.md) | **How to run and test**: prerequisites, running the game, what to try as a reviewer, configuration, troubleshooting |
-| [docs/UNIT_TESTS.md](docs/UNIT_TESTS.md) | How to run unit tests (backend and frontend), what each suite locks, team conventions |
-| [docs/E2E_TESTS.md](docs/E2E_TESTS.md) | How to run e2e tests (backend API and browser) against the running system, debugging, conventions |
+| [docs/RUN.md](docs/RUN.md) | **How to run**: prerequisites, running the game, what to try as a reviewer, configuration, troubleshooting |
+| [docs/UNIT_TESTS.md](docs/UNIT_TESTS.md) | **How to run unit tests** (backend and frontend): what each suite locks, single-test runs, conventions |
+| [docs/E2E_TESTS.md](docs/E2E_TESTS.md) | **How to run e2e tests** (backend API and browser) against the running system: debugging, conventions |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Design, scaling, failure modes, roadmap, and the summary for leadership |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Deploying backend and frontend as separate Cloud Run services, and CI |
 | [docs/AI_NOTE.md](docs/AI_NOTE.md) | How AI assistants were used, and the standards I'd set for a squad |
@@ -20,7 +20,7 @@ The server owns the path, the lock-in and settlement. The browser only renders w
 
 ## Quick start
 
-JDK 25 and Node 20+ installed (setup steps in [RUN_AND_TEST.md](docs/RUN_AND_TEST.md#1-prerequisites)). From the repository root:
+JDK 25 and Node 20+ installed (setup steps in [RUN.md](docs/RUN.md#1-prerequisites)). From the repository root:
 
 ```bash
 npm install     # installs the dev runner and the frontend and e2e dependencies
@@ -28,6 +28,17 @@ npm run dev     # starts backend (:8080) and frontend (:5173) together; open htt
 npm test        # unit tests: backend, then frontend
 npm run e2e     # functional tests of the running system (one-time setup: npm run e2e:install)
 ```
+
+## Test layers
+
+The rule: **each app's own folder holds unit tests** (fast, nothing running). **`e2e/` holds functional tests of the running system, one folder per app.** Nothing in `e2e/` is mocked.
+
+| Layer | Where | What is real | Count | Guide |
+|---|---|---|---|---|
+| Backend unit, property and simulation | `backend/src/test/` | Pure engine; path and quotes scripted or seeded | 34 | [UNIT_TESTS.md](docs/UNIT_TESTS.md) |
+| Frontend unit and component | `frontend/src/**/*.test.ts(x)` | Reducer and components, no network | 32 | [UNIT_TESTS.md](docs/UNIT_TESTS.md) |
+| Backend functional | `e2e/backend/` | Running backend, driven black-box over its public WebSocket API | 6 | [E2E_TESTS.md](docs/E2E_TESTS.md) |
+| Frontend functional (full stack) | `e2e/frontend/` | Real browser → running frontend → running backend | 2 | [E2E_TESTS.md](docs/E2E_TESTS.md) |
 
 ## Project layout
 
@@ -51,5 +62,5 @@ e2e/                          Functional tests of the running system (own packag
   backend/                    Black-box WebSocket API tests (no browser)
   frontend/                   Browser tests through the real frontend
   support/                    Shared protocol-level test client
-docs/                         Run & test, unit tests, e2e tests, architecture, deployment, AI note, estimate
+docs/                         Run, unit tests, e2e tests, architecture, deployment, AI note, estimate
 ```

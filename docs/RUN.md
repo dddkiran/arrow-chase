@@ -1,17 +1,6 @@
-# How to run and test
+# How to run
 
-This is the **execution guide**: how a reviewer installs, runs, plays and tests the slice on a clean machine. Test details live in [UNIT_TESTS.md](UNIT_TESTS.md) and [E2E_TESTS.md](E2E_TESTS.md).
-
-**Quick start** (JDK 25 and Node 20+ installed), from the repository root:
-
-```bash
-npm install     # installs the dev runner and the frontend and e2e dependencies
-npm run dev     # starts backend (:8080) and frontend (:5173) together; open http://localhost:5173
-npm test        # unit tests: backend, then frontend
-npm run e2e     # functional tests of the running system (one-time setup: npm run e2e:install)
-```
-
----
+How to install, run and play the slice on a clean machine. To run the tests, follow [UNIT_TESTS.md](UNIT_TESTS.md) and [E2E_TESTS.md](E2E_TESTS.md); both use the prerequisites below.
 
 ## 1. Prerequisites
 
@@ -94,28 +83,7 @@ Dimmed blocks (–) are closed: the arrow either can't reach them within the win
 
 Things worth trying: bet on several blocks at once, refresh the page in the middle of a bet (your balance and open bets come back), or stop the backend and start it again (the client reconnects by itself; balances reset because state is in memory, see the [architecture note](ARCHITECTURE.md)).
 
-## 3. Run the tests
-
-The rule: **each app's own folder holds unit tests** (fast, no running system). **`e2e/` holds functional tests of the running system, one folder per app.** Nothing in `e2e/` is mocked.
-
-| Layer | Where | What is real | Count | Guide |
-|---|---|---|---|---|
-| Backend unit, property and simulation | `backend/src/test/` | Pure engine; path and quotes scripted or seeded | 34 | [UNIT_TESTS.md](UNIT_TESTS.md) |
-| Frontend unit and component | `frontend/src/**/*.test.ts(x)` | Reducer and components, no network | 32 | [UNIT_TESTS.md](UNIT_TESTS.md) |
-| **Backend functional** | `e2e/backend/` | Running backend, driven black-box over its public WebSocket API (no browser) | 6 | [E2E_TESTS.md](E2E_TESTS.md) |
-| **Frontend functional (full stack)** | `e2e/frontend/` | Real browser → running frontend → running backend | 2 | [E2E_TESTS.md](E2E_TESTS.md) |
-
-From the repository root (after `npm install`):
-
-```bash
-npm test              # all unit tests (about 20 s)
-npm run e2e:install   # one-time: downloads Chromium for the browser tests
-npm run e2e           # all functional tests; starts both apps if they aren't running (about 35 s)
-```
-
-Expected: `Tests run: 34, Failures: 0` and `BUILD SUCCESS` for the backend, `Tests  32 passed (32)` for the frontend, and `8 passed` for the functional tests.
-
-## 4. Configuration
+## 3. Configuration
 
 All game tuning is in [backend/src/main/resources/application.yml](../backend/src/main/resources/application.yml) under `game.*`: grid size, step speed, bet window, target RTP, jitter, stake limits and starting balance. Any value can be overridden on the command line, for example:
 
@@ -125,7 +93,7 @@ All game tuning is in [backend/src/main/resources/application.yml](../backend/sr
 
 Setting `game.seed` makes the arrow path and quotes repeat exactly, which helps when debugging.
 
-## 5. Troubleshooting
+## 4. Troubleshooting
 
 | Symptom | Fix |
 |---|---|

@@ -11,7 +11,7 @@ They use [Playwright](https://playwright.dev) with one config ([e2e/playwright.c
 
 ## Prerequisites
 
-- JDK 25 and Node 20+, set up as in [RUN_AND_TEST.md](RUN_AND_TEST.md#1-prerequisites). Playwright starts the backend with Maven, so `JAVA_HOME` matters here too.
+- JDK 25 and Node 20+, set up as in [RUN.md](RUN.md#1-prerequisites). Playwright starts the backend with Maven, so `JAVA_HOME` matters here too.
 - Dependencies and the browser, once:
 
 ```bash
