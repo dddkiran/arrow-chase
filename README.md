@@ -171,7 +171,7 @@ npm run e2e:backend   # backend API tests only (no browser)
 npm run e2e:frontend  # browser tests only
 ```
 
-Expected: `8 passed` (about 35 s; the first cold run takes longer while the backend builds). The backend tests can also run against a deployed backend: `API_URL=https://<api-url> npm run e2e:backend`. It saves a screenshot to `e2e/test-results/after-settlement.png`. You may see `[vite] ws proxy error: write ECONNABORTED` lines near the end. They're harmless: Playwright closes the browser while the server is still streaming moves.
+Expected: `8 passed` (about 35 s; the first cold run takes longer while the backend builds). The backend tests can also run against a deployed backend: `API_URL=https://<api-url> npm run e2e:backend`. It saves a screenshot to `e2e/test-results/after-settlement.png`.
 
 ## 4. Configuration
 
