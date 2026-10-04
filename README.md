@@ -32,9 +32,16 @@ npm test        # runs backend and frontend test suites
 
 You don't need to install Maven. The repo includes the Maven wrapper (`mvnw` / `mvnw.cmd`).
 
-> **Check `JAVA_HOME`.** Point it at a JDK 25 or newer, or the backend won't compile.
-> PowerShell: `$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-25..."`
-> bash: `export JAVA_HOME=/path/to/jdk-25`
+> **Check `JAVA_HOME`.** Maven uses `JAVA_HOME` if it's set, and otherwise `java` on your PATH, which on many machines is an old Java 8 or 17. The root scripts check this first and tell you if it's wrong.
+>
+> Windows (PowerShell) install and setup:
+> ```powershell
+> winget install --id EclipseAdoptium.Temurin.25.JDK -e
+> $jdk = (Get-ChildItem 'C:\Program Files\Eclipse Adoptium' -Directory -Filter 'jdk-25*' | Select-Object -First 1).FullName
+> [Environment]::SetEnvironmentVariable('JAVA_HOME', $jdk, 'User')   # then open a NEW terminal
+> ```
+> macOS: `brew install --cask temurin@25 && export JAVA_HOME=$(/usr/libexec/java_home -v 25)`
+> Linux: install a JDK 25 (for example `sdk install java 25-tem`) and `export JAVA_HOME=/path/to/jdk-25`
 
 Ports used: **8080** (backend) and **5173** (frontend dev server).
 
@@ -205,7 +212,8 @@ docs/                         Architecture, AI note, estimate, deployment
 
 | Symptom | Fix |
 |---|---|
-| `release version 25 not supported` / `invalid target release` | `JAVA_HOME` points at an old JDK. Point it at JDK 25 or newer. |
+| `The backend needs JDK 25 or newer, but … is Java 8` | Maven would run on an old JDK. Install JDK 25 and set `JAVA_HOME` (see Prerequisites), then open a new terminal. |
+| `Unrecognized option: --sun-misc-unsafe-memory-access` or `release version 25 not supported` when running `./mvnw` directly | Same cause: the JDK is older than 25. |
 | `Port 8080 was already in use` | Stop the other process, or run with `-Dspring-boot.run.arguments=--server.port=8081` and start the frontend with `BACKEND_URL=http://localhost:8081 npm run dev`. |
 | Page stays on "Connecting…" / "Server unreachable, retrying…" | The backend isn't running, or isn't on 8080. The frontend proxies `/ws` to it. With `npm run dev`, check the `[api]` lines for a startup error. |
 | WebSocket closes immediately (403) when the page isn't on localhost | The backend only accepts origins listed in `ALLOWED_ORIGINS` (default `http://localhost:*,http://127.0.0.1:*`). |
