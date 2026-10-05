@@ -37,6 +37,11 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
     private static final Pattern REQUEST_ID = Pattern.compile("[A-Za-z0-9-]{1,64}");
     private static final int MAX_NAME_LENGTH = 20;
     private static final String PLAYER_ID_ATTR = "playerId";
+    private static final String BET_LIMITER_ATTR = "betLimiter";
+    /** A burst of 10 quick clicks, then 5 bets a second sustained: well above a human, far below a flood. */
+    private static final int BET_BURST = 10;
+    private static final double BETS_PER_SECOND = 5;
+    static final String RATE_LIMITED = "RATE_LIMITED";
 
     private final GameLoop loop;
     private final ClientRegistry clients;
@@ -58,6 +63,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         }
         String name = sanitizeName(params.getFirst("name"));
         session.getAttributes().put(PLAYER_ID_ATTR, playerId);
+        session.getAttributes().put(BET_LIMITER_ATTR, new TokenBucket(BET_BURST, BETS_PER_SECOND, System::nanoTime));
 
         // Register and greet on the game thread so the welcome snapshot is always the first message the
         // client sees, ahead of any step broadcast.
@@ -91,6 +97,13 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
             clients.sendToSession(session.getId(), new ErrorMessage("placeBet needs a requestId"));
             return;
         }
+        // Refused here, before the game thread: a flood never reaches the engine, so it can neither queue up
+        // behind ticks nor fill the engine's idempotency cache. Nothing is cached, so the same requestId can be
+        // sent again once the client slows down.
+        if (!betLimiterOf(session).tryAcquire()) {
+            clients.sendToSession(session.getId(), new BetRejected(bet.requestId(), RATE_LIMITED, null));
+            return;
+        }
         loop.execute(engine -> {
             PlaceBetResult result = engine.placeBet(playerId, bet.requestId(),
                     new Cell(bet.row(), bet.col()), bet.stakeCents());
@@ -119,6 +132,10 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
 
     private static String playerIdOf(WebSocketSession session) {
         return (String) session.getAttributes().get(PLAYER_ID_ATTR);
+    }
+
+    private static TokenBucket betLimiterOf(WebSocketSession session) {
+        return (TokenBucket) session.getAttributes().get(BET_LIMITER_ATTR);
     }
 
     static String sanitizeName(String raw) {

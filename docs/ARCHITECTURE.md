@@ -4,7 +4,7 @@
 
 ### In one paragraph
 
-One server runs **one shared game** for everyone. Every 0.7 seconds it moves the arrow one block, recalculates the multiplier on every block, settles any bets the move decided, and sends the new state to every connected browser. Browsers only **display** that state and **send bets**; they never decide anything. When a player bets, the server records the block's multiplier at that moment (the *lock-in*) and takes the stake. If the arrow enters that block within the next 10 moves, the server pays `stake × locked multiplier`; otherwise the bet is lost.
+One server runs **one shared game** for everyone. Every 0.7 seconds (configurable as `game.step-millis` in `backend/src/main/resources/application.yml`) it moves the arrow one block, recalculates the multiplier on every block, settles any bets the move decided, and sends the new state to every connected browser. Browsers only **display** that state and **send bets**; they never decide anything. When a player bets, the server records the block's multiplier at that moment (the *lock-in*) and takes the stake. If the arrow enters that block within the next 10 moves, the server pays `stake × locked multiplier`; otherwise the bet is lost.
 
 ### The pieces
 

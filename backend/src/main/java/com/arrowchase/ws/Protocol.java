@@ -67,9 +67,12 @@ public final class Protocol {
     @Schema(description = "placeBet refused; nothing was charged.")
     public record BetRejected(String requestId,
                               @Schema(allowableValues = {"UNKNOWN_PLAYER", "INVALID_CELL", "CELL_CLOSED",
-                                      "INVALID_STAKE", "INSUFFICIENT_FUNDS", "TOO_MANY_OPEN_BETS"})
+                                      "INVALID_STAKE", "INSUFFICIENT_FUNDS", "TOO_MANY_OPEN_BETS",
+                                      "RATE_LIMITED"})
                               String reason,
-                              long balanceCents) implements ServerMessage {
+                              @Schema(nullable = true, description = "Null for RATE_LIMITED, which the gateway "
+                                      + "decides without consulting the wallet.")
+                              Long balanceCents) implements ServerMessage {
     }
 
     @Schema(description = "A bet won or lost.")

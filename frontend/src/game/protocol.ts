@@ -78,7 +78,8 @@ export interface BetRejectedMessage {
   type: 'betRejected';
   requestId: string;
   reason: RejectReason;
-  balanceCents: number;
+  /** Null for RATE_LIMITED: the gateway refuses those without consulting the wallet. */
+  balanceCents: number | null;
 }
 
 export interface BetSettledMessage {
@@ -98,7 +99,8 @@ export type RejectReason =
   | 'CELL_CLOSED'
   | 'INVALID_STAKE'
   | 'INSUFFICIENT_FUNDS'
-  | 'TOO_MANY_OPEN_BETS';
+  | 'TOO_MANY_OPEN_BETS'
+  | 'RATE_LIMITED';
 
 export type ServerMessage =
   | WelcomeMessage

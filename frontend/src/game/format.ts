@@ -25,6 +25,7 @@ const REASONS: Record<string, string> = {
   INVALID_STAKE: 'Stake is outside the allowed range.',
   INSUFFICIENT_FUNDS: 'Not enough balance for that stake.',
   TOO_MANY_OPEN_BETS: 'Too many open bets. Wait for some to settle.',
+  RATE_LIMITED: 'Too many bets too quickly. Slow down a little.',
   INVALID_CELL: 'That block does not exist.',
   UNKNOWN_PLAYER: 'Session not recognised. Reload the page.',
 };

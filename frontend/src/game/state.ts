@@ -112,7 +112,7 @@ function onServerMessage(state: GameState, message: ServerMessage): GameState {
       return addNotice(
         {
           ...state,
-          balanceCents: message.balanceCents,
+          balanceCents: message.balanceCents ?? state.balanceCents,
           pending: without(state.pending, message.requestId),
         },
         'error',
