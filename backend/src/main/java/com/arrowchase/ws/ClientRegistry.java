@@ -14,29 +14,25 @@ import com.arrowchase.ws.Protocol.Step;
 import com.arrowchase.ws.Protocol.WinDto;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
-import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
 
 /** Connected sessions, and fan-out of game events to them. */
 @Component
 public class ClientRegistry implements GameEvents {
 
-    private static final Logger log = LoggerFactory.getLogger(ClientRegistry.class);
-    /** A client that cannot drain this much within the time limit is disconnected; it resyncs on reconnect. */
+    /** A client whose write is stuck this long, or whose backlog grows this large, is disconnected. */
     private static final int SEND_TIME_LIMIT_MS = 5_000;
     private static final int SEND_BUFFER_LIMIT_BYTES = 512 * 1024;
 
-    record Client(String playerId, String name, WebSocketSession session) {
+    /** Messages go through the client's {@link Outbox}, so the game thread never writes to a socket itself. */
+    record Client(String playerId, String name, Outbox outbox) {
     }
 
     private final Map<String, Client> clients = new ConcurrentHashMap<>();
@@ -47,13 +43,15 @@ public class ClientRegistry implements GameEvents {
     }
 
     void add(WebSocketSession session, String playerId, String name) {
-        WebSocketSession safe = new ConcurrentWebSocketSessionDecorator(
-                session, SEND_TIME_LIMIT_MS, SEND_BUFFER_LIMIT_BYTES);
-        clients.put(session.getId(), new Client(playerId, name, safe));
+        Outbox outbox = new Outbox(session, SEND_TIME_LIMIT_MS, SEND_BUFFER_LIMIT_BYTES);
+        clients.put(session.getId(), new Client(playerId, name, outbox));
     }
 
     void remove(String sessionId) {
-        clients.remove(sessionId);
+        Client client = clients.remove(sessionId);
+        if (client != null) {
+            client.outbox().close(CloseStatus.NORMAL);
+        }
     }
 
     int playersOnline() {
@@ -71,19 +69,23 @@ public class ClientRegistry implements GameEvents {
     void sendToSession(String sessionId, ServerMessage message) {
         Client client = clients.get(sessionId);
         if (client != null) {
-            send(client, serialize(message));
+            send(sessionId, client, serialize(message));
         }
     }
 
     /** All tabs of a player see the same bets and balance. */
     void sendToPlayer(String playerId, ServerMessage message) {
         TextMessage text = serialize(message);
-        clients.values().stream().filter(c -> c.playerId().equals(playerId)).forEach(c -> send(c, text));
+        clients.forEach((sessionId, client) -> {
+            if (client.playerId().equals(playerId)) {
+                send(sessionId, client, text);
+            }
+        });
     }
 
     void broadcast(ServerMessage message) {
         TextMessage text = serialize(message);
-        clients.values().forEach(c -> send(c, text));
+        clients.forEach((sessionId, client) -> send(sessionId, client, text));
     }
 
     @Override
@@ -120,22 +122,11 @@ public class ClientRegistry implements GameEvents {
         }
     }
 
-    private void send(Client client, TextMessage text) {
-        WebSocketSession session = client.session();
-        if (!session.isOpen()) {
-            return;
-        }
-        try {
-            session.sendMessage(text);
-        } catch (IOException | RuntimeException e) {
-            // Includes SessionLimitExceededException for slow consumers. Drop them; the client reconnects.
-            log.debug("Dropping session {}: {}", session.getId(), e.getMessage());
-            clients.remove(session.getId());
-            try {
-                session.close(CloseStatus.SESSION_NOT_RELIABLE);
-            } catch (IOException ignored) {
-                // already gone
-            }
+    /** Never blocks: the message is queued for the client's own sender thread. */
+    private void send(String sessionId, Client client, TextMessage text) {
+        if (!client.outbox().offer(text)) {
+            // Too far behind (the outbox closed the session); it resyncs from the welcome snapshot on reconnect.
+            clients.remove(sessionId);
         }
     }
 }
