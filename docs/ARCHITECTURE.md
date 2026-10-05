@@ -21,7 +21,7 @@ One server runs **one shared game** for everyone. Every 0.7 seconds (configurabl
 | Part | Its one job | Code |
 |---|---|---|
 | **Browser** | Draw what the server sends. Send a bet when a block is clicked. Reconnect by itself if the connection drops. | `frontend/src/` |
-| **1. Gateway** | Hold the WebSocket connections, check incoming messages are well-formed, and pass bets on to the game loop. Send each message to the right players. Disconnect clients too slow to keep up. | `backend/.../ws/` |
+| **1. Gateway** | Hold the WebSocket connections, check incoming messages are well-formed, rate-limit bets per player, and pass bets on to the game loop. Send each message to the right players. Disconnect clients too slow to keep up. | `backend/.../ws/` |
 | **2. Game loop** | The **only** thread that touches game state. It does two kinds of work, strictly one at a time: a *tick* every 0.7 s, and *bet requests* from the gateway. | `backend/.../app/GameLoop.java` |
 | **3. Engine** | The rules: where the arrow goes, what each block pays, wallets, accepting or rejecting bets, settling them. Plain Java with no framework, network or clock, so it can be tested exactly. | `backend/.../game/` |
 
@@ -63,7 +63,7 @@ All money is sent as **whole cents** and multipliers as **whole hundredths** (24
 | **The rules engine has no framework, clock or hidden randomness** | Every rule is tested exactly with a scripted arrow path. A fixed seed replays a whole game. The engine can move to another process unchanged. | A little wiring code. |
 | **The arrow and the prices use the same movement rules** | Prices can't drift from how the arrow really moves, so the 95% return is built in and testable. | Changing the movement changes the prices too. That's correct, but needs a maths sign-off. |
 | **Money as integer cents, payouts rounded down** | No rounding errors in settlement, in Java or in the browser. | None worth mentioning. |
-| **Every bet carries a `requestId`; repeats return the first answer** | A retry after a network blip can never charge twice. | The list of seen requests is in memory (last 50,000). It must become durable before real money (see roadmap). |
+| **Every bet carries a `requestId`; repeats return the first decision, with the bet and balance as they are now** | A retry after a network blip can never charge twice. | The list of seen requests is in memory (last 50,000). It must become durable before real money (see roadmap). |
 | **A full snapshot on every connect** | Reconnecting, refreshing or opening a second tab all end up showing exactly what the server has. No recovery logic in the browser. | A slightly larger first message. |
 | **Plain WebSocket with JSON messages** (no messaging framework on top) | A small, explicit protocol that's easy to read and test. | No built-in pub/sub. We add our own when scaling out (§2). |
 
@@ -71,7 +71,7 @@ All money is sent as **whole cents** and multipliers as **whole hundredths** (24
 
 **Where the load actually is.** The engine is cheap: one step is microseconds. What costs money is **fan-out**. Each viewer gets about 1.4 step messages per second, roughly 0.5 KB each, so about 0.7 KB/s per viewer. 10k viewers is about 7 MB/s (~60 Mbit/s) from one game. Cost grows with **watchers**, not bettors.
 
-**Today on Cloud Run** ([DEPLOY.md](DEPLOY.md)): the frontend (nginx) scales freely, but the API is pinned to **exactly one always-on instance**, because the game lives in that process's memory. Step 1 below is what removes that pin.
+**Today:** the frontend (nginx) scales freely, but the API must run as **exactly one always-on instance**, because the game lives in that process's memory. Step 1 below is what removes that pin.
 
 **The path to scale, in order of need:**
 
@@ -87,21 +87,22 @@ All money is sent as **whole cents** and multipliers as **whole hundredths** (24
 |---|---|---|
 | **Server process dies** | **All state is lost**: balances, open bets, the path. Clients reconnect and get a fresh wallet. *This is the biggest gap and it's deliberate for a slice.* | A durable event log plus a hot standby engine (leader election). Open bets survive and settle after failover. |
 | Gateway / network blip | The client reconnects with backoff, gets a snapshot, and re-sends any unconfirmed bet with the same `requestId`, which the server de-duplicates. | Same. |
-| Slow or stuck client | Its send buffer is capped (512 KB / 5 s), then it's disconnected. It can't slow the game for anyone else. | Same, plus metrics on evictions. |
+| Slow or stuck client | Each client has its own outbox, written to its socket by its own virtual thread; the game thread only queues messages, so one stuck socket blocks nobody else. A client whose write is stuck for 5 s or whose backlog passes 512 KB is disconnected, and resyncs from the snapshot when it reconnects. | Same, plus metrics on evictions. |
+| Bet flood from one player | Bets are rate-limited per player before they reach the game thread: a burst of 10, then 5 a second. The limit is shared by all of that player's connections, so extra tabs or sockets don't raise it. | Per-account and per-IP limits at the edge as well (see the security note below). |
 | A tick throws an exception | Caught and logged. The schedule keeps running (an uncaught exception would silently freeze the game). | Alert on tick errors and on tick lag. |
 | Tick overrun (GC pause, CPU starvation) | `scheduleAtFixedRate` catches up with back-to-back steps, so players see the arrow jump. | Measure tick lag. Decide whether to catch up or skip. Cap the catch-up. |
 | Bet arrives as the arrow moves | It's queued on the game thread and gets the quote from whichever step it lands on. The player may lock a different number than the one they saw. | A product decision: accept the move, or let the client send `maxAcceptableChange` and reject if the price moved more than that (like "slippage" in trading). |
 | Duplicate settlement | Impossible within one engine: the bet is removed from the open set in the same step. | Ledger credits are idempotent on `betId`. |
 | RNG | `SplittableRandom` seeded from `SecureRandom`. That's fine for a demo, but it's **not** a certified or cryptographically strong generator. | A certified DRBG (for example a SHA-256/HMAC DRBG) with GLI-19-style certification, and seed handling audited. |
 
-**Security gaps, known and accepted for the slice:** identity is a client-generated ID with no authentication (anyone who knows the ID can bet as that player). There's no rate limiting beyond the open-bet cap. Allowed origins are localhost. Real money needs auth (JWT from the platform session), per-player rate limits, and responsible-gambling limits.
+**Security gaps, known and accepted for the slice:** identity is a client-generated ID with no authentication (anyone who knows the ID can bet as that player). Bets are rate-limited per player, but because player IDs cost nothing to make up, someone can get around that by inventing new IDs; only authentication plus per-IP limits at the edge close that gap. Allowed origins are localhost. Real money needs auth (JWT from the platform session), edge rate limits, and responsible-gambling limits.
 
 ## 4. Technical roadmap
 
 | Phase | Goal | Main work | Exit criteria |
 |---|---|---|---|
-| **0 — Slice (this)** | Show the game loop and that pricing is honest | Engine, pricing, WS, UI, tests | A reviewer plays it. Invariants are tested. |
-| **1 — Real players, one node** | Can run for real users on play money | Auth, wallet service integration (reserve/settle), Postgres event log + snapshot recovery, metrics (tick lag, bet→lock p99, sockets, observed vs. target RTP), structured logs, CI pipeline, containerised deploy | Restarting the server loses no bets. RTP dashboard. Load test at 2k sockets. |
+| **0 — Slice (this)** | Show the game loop and that pricing is honest | Engine, pricing, WS, UI, tests, CI, container images | A reviewer plays it. Invariants are tested. |
+| **1 — Real players, one node** | Can run for real users on play money | Auth, wallet service integration (reserve/settle), Postgres event log + snapshot recovery, metrics (tick lag, bet→lock p99, sockets, observed vs. target RTP), structured logs, automated deploy (CI and container images already exist) | Restarting the server loses no bets. RTP dashboard. Load test at 2k sockets. |
 | **2 — Scale and resilience** | Many viewers, no single point of failure | Gateway/engine split over pub/sub, engine leader election + hot standby, delta protocol, load test to 50k sockets (k6/Gatling), chaos tests (kill the leader mid-bet) | Leader failover under 2 s with no lost bets. Cost per 1k viewers known. |
 | **3 — Real money and product** | Ready for a regulated market | Certified RNG, independent maths/RTP review, responsible-gambling limits, audit trail export, multiple tables and risk profiles, mobile UX, i18n | Certification passed. Go-live in the first jurisdiction. |
 
@@ -118,4 +119,4 @@ All money is sent as **whole cents** and multipliers as **whole hundredths** (24
 5. **Running costs grow with viewers, not with bets.** A popular game that people mostly watch costs bandwidth without earning. We should measure the viewer-to-bettor ratio early and design the "watch only" mode to be cheap.
 6. **The house edge is a setting, and it has to be governed.** Changing the speed, grid or window changes payouts automatically. Every change to those needs a sign-off, the same way we treat pricing changes elsewhere.
 
-**What we'd ask for:** a small squad (1 backend, 1 frontend, 1 QA) for about 10–12 weeks to reach a play-money launch that survives a server restart (see [ESTIMATE.md](ESTIMATE.md)). Certification and compliance run in parallel, with a named owner.
+**What we'd ask for:** a small squad (2 full-stack engineers and a shared QA). With them, a play-money launch that survives a server restart is possible at about **week 8**, engineering for real money is complete at **week 12** (plus 2 weeks of contingency), and real-money go-live lands at **16–20 weeks**, gated by external certification rather than by engineering (see [ESTIMATE.md](ESTIMATE.md)). Certification and compliance run in parallel, with a named owner.

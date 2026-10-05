@@ -22,7 +22,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '25'
+          java-version: '27'
           cache: maven
       - run: ./mvnw -B test # unit tests; API-level functional tests run in e2e.yml
       - name: Upload test reports
@@ -33,7 +33,7 @@ jobs:
           path: backend/target/surefire-reports
 
   image:
-    # Proves the Cloud Run image builds. Pushing/deploying is a separate, deliberate step (docs/DEPLOY.md).
+    # Proves the backend image builds. Nothing is pushed or deployed.
     needs: test
     runs-on: ubuntu-latest
     steps:

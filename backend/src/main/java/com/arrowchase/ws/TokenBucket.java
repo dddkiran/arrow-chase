@@ -32,13 +32,23 @@ final class TokenBucket {
 
     /** Spends one token if there is one. */
     synchronized boolean tryAcquire() {
-        long now = nanoClock.getAsLong();
-        tokens = Math.min(capacity, tokens + (now - lastRefillNanos) * tokensPerNano);
-        lastRefillNanos = now;
+        refill();
         if (tokens < 1) {
             return false;
         }
         tokens -= 1;
         return true;
+    }
+
+    /** True when the bucket has refilled completely, so it behaves exactly like a new one. */
+    synchronized boolean isFull() {
+        refill();
+        return tokens >= capacity;
+    }
+
+    private void refill() {
+        long now = nanoClock.getAsLong();
+        tokens = Math.min(capacity, tokens + (now - lastRefillNanos) * tokensPerNano);
+        lastRefillNanos = now;
     }
 }

@@ -8,18 +8,22 @@ I built this slice pair-programming with an AI coding agent (Claude Code) in the
 - **It was most valuable** for the pricing maths (the Markov-chain DP and spotting that one backward pass gives every start state, so the table can be computed once), for writing the large test matrix quickly, and for tedious-but-error-prone work like keeping TypeScript protocol types in line with Java records.
 - **Verification was not delegated.** Every claim was checked by running something: unit tests, a Monte Carlo test that cross-checks the exact probabilities, a 900k-bet simulation to measure RTP (94.8%) before writing it in a document for leadership, and a Playwright run with screenshots to see the UI, not just trust that it rendered.
 
-**What it got wrong, and what caught it:**
-
-| Issue | Caught by |
-|---|---|
-| Two engine tests assumed quotes change immediately. In fact they change only on a step, which is the correct design. The tests were wrong, not the engine. | Running the tests, then reading the failure carefully instead of "fixing" the engine to match the test. |
-| The first version re-ran the probability DP every tick. That was fine for one tick, but would have made a 20k-step simulation take minutes. | Reasoning about complexity before running it. |
-| The arrow glyph rendered as an emoji star in Chromium, and the board overflowed a 720px-high screen. | Looking at a real screenshot. Unit tests can't see this. |
-| An e2e selector matched both the "5.00" stake chip and a "5.00x" tile. | The e2e run itself. |
-
-None of these were exotic. They're exactly the class of bug a confident reviewer approves without running anything. That's the lesson behind the standards below.
 
 ## Standards I'd set for a squad
+
+**How work flows**
+
+1. **AI first.** Every task starts with the agent: it reads the ticket and the code and proposes a plan before any code is written.
+2. **Steer, don't hand off.** The engineer reviews and corrects the plan, prompts the agent to carry out that plan, then checks it did exactly that: the diff matches the plan, with no unrequested changes, weakened tests or "while I was here" edits.
+3. **A local AI dev loop.** Write code, AI review of the diff, write unit and integration tests, run the repo's own build, test and lint commands; repeat until green. Another human sees the work only after the loop passes.
+4. **Humans commit.** The agent never commits or pushes. This is enforced in the agent's permission settings (deny `git commit` and `git push`), not left to the prompt.
+5. **No direct pushes to main.** Branch protection is on, and every change goes through a clean PR that carries its evidence: the agreed plan, test output, a screenshot for UI or a log/trace for backend, and the AI review notes. The pipeline runs build, unit, integration and e2e tests, lint and security scans on every PR. No merge on "looks right".
+6. **A human approves every PR, and accountability sits with people.** The coder owns what was written, the reviewer what was approved, QA what was signed off, whoever or whatever typed it. "The AI wrote it" is never an answer in review or in an incident.
+
+**Steering**
+
+- **Team coding guidelines live in steering files in the repo** (e.g. `CLAUDE.md` plus per-module rules): conventions, architecture boundaries, test expectations, what not to touch. They are versioned and reviewed like code, and updated whenever review catches the same AI mistake twice.
+- **Every tool the agent integrates with gets its own steering file** (CI, cloud, database, ticketing, observability, MCP servers): how to use it, which commands and environments are allowed, what is read-only, and what always needs a human.
 
 **Allowed and encouraged**
 
@@ -28,11 +32,9 @@ None of these were exotic. They're exactly the class of bug a confident reviewer
 
 **Non-negotiable**
 
-1. **The human who opens the PR owns every line**, whoever or whatever typed it. "The AI wrote it" is never an answer in review or in an incident.
-2. **Behaviour is locked by tests the engineer has read and understands.** For AI-written tests, check that the test fails when the behaviour breaks: mutate the code or flip an assertion once.
-3. **Run it.** No merge on "looks right". CI is green and the author has exercised the change: a screenshot for UI, a log or trace for backend.
-4. **Normal review rules apply, with no reduced scrutiny because "it's generated".** Large AI-produced diffs get split up. Reviewers can reject a PR for being too big to review.
-5. **No secrets, customer data or production credentials in prompts.** Use only approved, enterprise-tier tools with no training on our data.
+1. **Behaviour is locked by tests the engineer has read and understands.** For AI-written tests, check that the test fails when the behaviour breaks: mutate the code or flip an assertion once.
+2. **Normal review rules apply, with no reduced scrutiny because "it's generated".** Large AI-produced diffs get split up. Reviewers can reject a PR for being too big to review.
+3. **No secrets, customer data or production credentials in prompts.** Use only approved, enterprise-tier tools with no training on our data.
 
 **Needs a named human expert to review, every time**
 
@@ -43,9 +45,6 @@ None of these were exotic. They're exactly the class of bug a confident reviewer
 
 **What I would not trust AI with**
 
-- Deciding product or regulatory rules (what counts as a win, how prices move, which jurisdictions allow what).
-- Claims about performance, cost or capacity without a measurement.
-- Dependency choices it "remembers". Versions and APIs change; check the lockfile, the changelog and licences.
-- Writing both the code *and* the only tests for safety-critical logic with no independent check. Here the Monte Carlo and simulation tests check the DP independently, and that's the pattern.
+Many things, because it hallucinates: it will invent APIs, config keys, file paths and test results, and report work as done when it isn't, all with the same confidence as when it's right. Nothing it says is taken for granted; every claim is verified by reading the code or running something. 
 
 **How I'd measure it is working:** lead time and change-failure rate (DORA), escaped defects per release, and review turnaround. If AI increases throughput but escaped defects rise, we tighten the review rules instead of shipping faster.

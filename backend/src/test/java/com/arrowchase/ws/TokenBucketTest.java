@@ -58,6 +58,20 @@ class TokenBucketTest {
     }
 
     @Test
+    void isFullOnlyOnceCompletelyRefilled() {
+        TokenBucket bucket = new TokenBucket(2, 5, now::get);
+        assertThat(bucket.isFull()).isTrue();
+
+        bucket.tryAcquire();
+        assertThat(bucket.isFull()).isFalse();
+
+        now.addAndGet(199 * MILLIS);
+        assertThat(bucket.isFull()).isFalse();
+        now.addAndGet(MILLIS);
+        assertThat(bucket.isFull()).isTrue();
+    }
+
+    @Test
     void rejectsNonsenseLimits() {
         assertThatThrownBy(() -> new TokenBucket(0, 5, now::get)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new TokenBucket(5, 0, now::get)).isInstanceOf(IllegalArgumentException.class);

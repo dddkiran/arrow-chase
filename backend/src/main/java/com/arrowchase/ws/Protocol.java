@@ -25,7 +25,8 @@ public final class Protocol {
 
     @Schema(description = "Bet on a block. Answered with betLocked or betRejected.")
     public record PlaceBet(
-            @Schema(description = "Client-chosen id, 1-64 of A-Z a-z 0-9 -. Resending it returns the first answer.",
+            @Schema(description = "Client-chosen id, 1-64 of A-Z a-z 0-9 -. Resending it returns the first "
+                    + "decision, with the bet and balance as they are now.",
                     requiredMode = Schema.RequiredMode.REQUIRED) String requestId,
             int row, int col, long stakeCents) implements ClientMessage {
     }

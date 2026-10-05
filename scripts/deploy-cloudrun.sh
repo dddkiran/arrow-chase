@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Deploys backend and frontend as two independent Cloud Run services, built from source with Cloud Build.
 # Usage:  PROJECT=my-gcp-project REGION=europe-west1 ./scripts/deploy-cloudrun.sh [api|web|all]
-# See docs/DEPLOY.md for what each setting means and why.
 set -euo pipefail
 
 : "${PROJECT:?set PROJECT to your GCP project id}"
@@ -17,7 +16,7 @@ url_of() {
 
 deploy_api() {
   # One instance, always on, CPU always allocated: the game state lives in this process's memory and the
-  # game loop must keep ticking with no request in flight. See docs/DEPLOY.md before changing these.
+  # game loop must keep ticking with no request in flight.
   local web_url
   web_url="$(url_of "$WEB")"
   gcloud run deploy "$API" \

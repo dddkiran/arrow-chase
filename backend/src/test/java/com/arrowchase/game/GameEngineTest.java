@@ -248,9 +248,43 @@ class GameEngineTest {
             quotes.setAll(700);
             PlaceBetResult retry = engine.placeBet("alice", "r1", new Cell(1, 1), 1_000);
 
-            assertThat(retry).isSameAs(first);
+            assertThat(retry).isEqualTo(first);
             assertThat(engine.balanceOf("alice")).isEqualTo(START_BALANCE - 1_000);
             assertThat(engine.openBetsOf("alice")).hasSize(1);
+        }
+
+        @Test
+        void a_retry_answers_with_the_balance_as_it_is_now() {
+            Bet first = accepted(engine.placeBet("alice", "r1", new Cell(1, 1), 1_000));
+            accepted(engine.placeBet("alice", "r2", new Cell(2, 2), 500));
+
+            PlaceBetResult retry = engine.placeBet("alice", "r1", new Cell(3, 3), 2_000);
+
+            assertThat(retry).isEqualTo(new PlaceBetResult.Accepted(first, START_BALANCE - 1_500));
+            assertThat(engine.balanceOf("alice")).isEqualTo(START_BALANCE - 1_500);
+        }
+
+        @Test
+        void a_retry_after_settlement_answers_with_the_settled_bet() {
+            accepted(engine.placeBet("alice", "r1", new Cell(0, 1), 1_000));
+            path.then(new Cell(0, 1));
+            engine.step();
+
+            Bet retried = accepted(engine.placeBet("alice", "r1", new Cell(0, 1), 1_000));
+
+            assertThat(retried.status()).isEqualTo(BetStatus.WON);
+            assertThat(engine.balanceOf("alice")).isEqualTo(START_BALANCE - 1_000 + 2_500);
+        }
+
+        @Test
+        void a_retried_rejection_keeps_its_reason_with_the_balance_as_it_is_now() {
+            assertRejected(engine.placeBet("alice", "r1", new Cell(1, 1), 1), RejectReason.INVALID_STAKE);
+            accepted(engine.placeBet("alice", "r2", new Cell(2, 2), 500));
+
+            PlaceBetResult retry = engine.placeBet("alice", "r1", new Cell(1, 1), 1_000);
+
+            assertThat(retry).isEqualTo(
+                    new PlaceBetResult.Rejected("r1", RejectReason.INVALID_STAKE, START_BALANCE - 500));
         }
 
         @Test

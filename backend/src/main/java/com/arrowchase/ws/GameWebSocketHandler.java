@@ -15,6 +15,8 @@ import com.arrowchase.ws.Protocol.ServerMessage;
 import com.arrowchase.ws.Protocol.Welcome;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
@@ -37,15 +39,18 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
     private static final Pattern REQUEST_ID = Pattern.compile("[A-Za-z0-9-]{1,64}");
     private static final int MAX_NAME_LENGTH = 20;
     private static final String PLAYER_ID_ATTR = "playerId";
-    private static final String BET_LIMITER_ATTR = "betLimiter";
-    /** A burst of 10 quick clicks, then 5 bets a second sustained: well above a human, far below a flood. */
+    /** Per player: a burst of 10 quick clicks, then 5 bets a second sustained: well above a human, far below a flood. */
     private static final int BET_BURST = 10;
     private static final double BETS_PER_SECOND = 5;
+    /** Above this many tracked players, idle (fully refilled) limiters are dropped. */
+    private static final int LIMITER_SWEEP_THRESHOLD = 10_000;
     static final String RATE_LIMITED = "RATE_LIMITED";
 
     private final GameLoop loop;
     private final ClientRegistry clients;
     private final ObjectMapper mapper;
+    private final BetRateLimiter betLimiter =
+            new BetRateLimiter(BET_BURST, BETS_PER_SECOND, LIMITER_SWEEP_THRESHOLD, System::nanoTime);
 
     public GameWebSocketHandler(GameLoop loop, ClientRegistry clients, ObjectMapper mapper) {
         this.loop = loop;
@@ -56,14 +61,13 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws IOException {
         var params = UriComponentsBuilder.fromUri(session.getUri()).build().getQueryParams();
-        String playerId = params.getFirst("playerId");
+        String playerId = decode(params.getFirst("playerId"));
         if (playerId == null || !PLAYER_ID.matcher(playerId).matches()) {
             session.close(CloseStatus.POLICY_VIOLATION.withReason("invalid playerId"));
             return;
         }
-        String name = sanitizeName(params.getFirst("name"));
+        String name = sanitizeName(decode(params.getFirst("name")));
         session.getAttributes().put(PLAYER_ID_ATTR, playerId);
-        session.getAttributes().put(BET_LIMITER_ATTR, new TokenBucket(BET_BURST, BETS_PER_SECOND, System::nanoTime));
 
         // Register and greet on the game thread so the welcome snapshot is always the first message the
         // client sees, ahead of any step broadcast.
@@ -100,7 +104,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         // Refused here, before the game thread: a flood never reaches the engine, so it can neither queue up
         // behind ticks nor fill the engine's idempotency cache. Nothing is cached, so the same requestId can be
         // sent again once the client slows down.
-        if (!betLimiterOf(session).tryAcquire()) {
+        if (!betLimiter.tryAcquire(playerId)) {
             clients.sendToSession(session.getId(), new BetRejected(bet.requestId(), RATE_LIMITED, null));
             return;
         }
@@ -134,8 +138,19 @@ public class GameWebSocketHandler extends TextWebSocketHandler {
         return (String) session.getAttributes().get(PLAYER_ID_ATTR);
     }
 
-    private static TokenBucket betLimiterOf(WebSocketSession session) {
-        return (TokenBucket) session.getAttributes().get(BET_LIMITER_ATTR);
+    /**
+     * Query values arrive still percent-encoded, with spaces as '+' (as browsers' URLSearchParams writes them).
+     * Returns null for a missing or malformed value.
+     */
+    static String decode(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        try {
+            return URLDecoder.decode(raw, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     static String sanitizeName(String raw) {

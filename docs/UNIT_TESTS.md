@@ -2,7 +2,7 @@
 
 Unit tests live **inside each app** and need nothing running: no server, no browser, no network. They are the fast feedback loop and run on every change in CI. Functional tests of the running system are in [E2E_TESTS.md](E2E_TESTS.md).
 
-Prerequisites: JDK 25 and Node 20+, set up as in [RUN.md](RUN.md#1-prerequisites).
+Prerequisites: JDK 27 and Node 20+, set up as in [RUN.md](RUN.md#1-prerequisites).
 
 ## Run everything
 
@@ -16,7 +16,7 @@ npm test      # backend suite, then frontend suite (about 20 s)
 Expected, in this order:
 
 ```
-[INFO] Tests run: 34, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 47, Failures: 0, Errors: 0, Skipped: 0
 [INFO] BUILD SUCCESS
 ...
  Test Files  3 passed (3)
@@ -25,16 +25,27 @@ Expected, in this order:
 
 `npm test` stops at the first failing suite and exits non-zero, so it can gate a commit or a CI step.
 
-## Backend: 34 tests
+## Backend: 50 tests
 
-JUnit 5 + AssertJ, in [backend/src/test/java/com/arrowchase/game/](../backend/src/test/java/com/arrowchase/game/). They test the game engine directly, without Spring. The arrow's path and the multipliers are either scripted or seeded, so every result is exact and repeatable.
+JUnit 5 + AssertJ, in [backend/src/test/java/com/arrowchase/](../backend/src/test/java/com/arrowchase/).
+
+**Game rules, `game/` (37).** These test the engine directly, without Spring. The arrow's path and the multipliers are either scripted or seeded, so every result is exact and repeatable.
 
 | Test class | What it locks |
 |---|---|
-| `GameEngineTest` (20) | Lock-in (the multiplier at placement is the one paid; the stake is debited), settlement (win within the window, loss at expiry, last-step hit, a bet settles exactly once, no hit counted on the block the arrow was on when betting), rejections (closed block, off-grid, stake limits, insufficient funds, unknown player, open-bet cap), and idempotency (a retried `requestId` is charged once, scoped per player). |
+| `GameEngineTest` (23) | Lock-in (the multiplier at placement is the one paid; the stake is debited), settlement (win within the window, loss at expiry, last-step hit, a bet settles exactly once, no hit counted on the block the arrow was on when betting), rejections (closed block, off-grid, stake limits, insufficient funds, unknown player, open-bet cap), and idempotency (a retried `requestId` is charged once, scoped per player, and answered with the bet and balance as they are now). |
 | `PathModelTest` (7) | Movement rules: valid probabilities, one block per move, never reverses, never leaves the grid, corners force the only turn, a seed replays the same path, every block is eventually visited. |
 | `PricingTest` (6) | Pricing honesty: exact hit probabilities match a 200,000-run Monte Carlo of the live path; no open block anywhere has an expected return of 1 or more; unlikely and near-certain blocks are closed; a configuration that would pay out more than it takes is refused. |
 | `GameSimulationTest` (1) | 20,000 steps with random players: money is conserved for every player, every accepted bet settles exactly once within its window, and the observed return to player is between 85% and 99%. |
+
+**Gateway, `ws/` (13).** The rate limiters run on a fake clock. The two Spring tests start the app on a random port and take about 10 s each, which is most of the backend suite's run time.
+
+| Test class | What it locks |
+|---|---|
+| `TokenBucketTest` (6) | Burst up to capacity, refill rate, no banking beyond capacity, a sustained flood held to the refill rate, when a bucket counts as full, invalid limits refused. |
+| `BetRateLimiterTest` (4) | The bet limit is per player, not per connection; players don't share a limit; clearing out idle limiters never gives anyone a fresh burst. |
+| `SlowClientTest` (1, Spring) | A client that stops reading doesn't stall the game for anyone else: a healthy client keeps receiving steps without a long gap. |
+| `ApiDocsTest` (2, Spring) | The OpenAPI document describes the actuator and every WebSocket message; Swagger UI is served. |
 
 Run from the repository root:
 
@@ -86,14 +97,10 @@ npm run build                                           # type check + productio
 - **Money is integer cents in tests too.** Assert exact values, never "close to".
 - **Check that a new test can fail.** Break the code or flip the assertion once before you commit it.
 
-## CI
-
-[.github/workflows/backend.yml](../.github/workflows/backend.yml) and [frontend.yml](../.github/workflows/frontend.yml) each run only when their own app changes. Each runs that app's unit tests (the frontend workflow also runs `npm run build`), then builds its container image. Backend test reports are uploaded when a run fails.
-
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| `The backend needs JDK 25 or newer, but … is Java 8` | Install JDK 25 and set `JAVA_HOME`; see [RUN.md](RUN.md#1-prerequisites). |
+| `The backend needs JDK 27 or newer, but … is Java 8` | Install JDK 27 and set `JAVA_HOME`; see [RUN.md](RUN.md#1-prerequisites). |
 | `No tests matching pattern` from Maven | Check the `-Dtest` spelling. Quote patterns that contain `*` or `#`. |
 | Frontend tests can't find `vitest` | Run `npm install` at the root, or `npm ci` in `frontend/`. |

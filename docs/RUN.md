@@ -6,7 +6,7 @@ How to install, run and play the slice on a clean machine. To run the tests, fol
 
 | Tool | Version | Check with |
 |---|---|---|
-| JDK | **25** or newer (Temurin, Corretto, etc.) | `java -version` |
+| JDK | **27** or newer (Temurin, Corretto, etc.) | `java -version` |
 | Node.js | **20** or newer (built and tested on 24) | `node -v` |
 | Internet access | the first build downloads Maven and npm packages | |
 
@@ -16,12 +16,12 @@ You don't need to install Maven. The repo includes the Maven wrapper (`mvnw` / `
 >
 > Windows (PowerShell) install and setup:
 > ```powershell
-> winget install --id EclipseAdoptium.Temurin.25.JDK -e
-> $jdk = (Get-ChildItem 'C:\Program Files\Eclipse Adoptium' -Directory -Filter 'jdk-25*' | Select-Object -First 1).FullName
+> winget install --id EclipseAdoptium.Temurin.27.JDK -e
+> $jdk = (Get-ChildItem 'C:\Program Files\Eclipse Adoptium' -Directory -Filter 'jdk-27*' | Select-Object -First 1).FullName
 > [Environment]::SetEnvironmentVariable('JAVA_HOME', $jdk, 'User')   # then open a NEW terminal
 > ```
-> macOS: `brew install --cask temurin@25 && export JAVA_HOME=$(/usr/libexec/java_home -v 25)`
-> Linux: install a JDK 25 (for example `sdk install java 25-tem`) and `export JAVA_HOME=/path/to/jdk-25`
+> macOS: `brew install --cask temurin@27 && export JAVA_HOME=$(/usr/libexec/java_home -v 27)`
+> Linux: install a JDK 27 (for example `sdk install java 27-tem`) and `export JAVA_HOME=/path/to/jdk-27`
 
 Ports used: **8080** (backend) and **5173** (frontend dev server).
 
@@ -40,7 +40,7 @@ Expected: the output is interleaved with `[api]` and `[web]` prefixes. After the
 
 ### Or run each app on its own
 
-The two apps are independent (they're deployed separately; see [DEPLOY.md](DEPLOY.md)). To run them by hand, use two terminals, both starting at the repository root.
+The two apps are independent. To run them by hand, use two terminals, both starting at the repository root.
 
 **Terminal 1: backend**
 
@@ -73,7 +73,7 @@ Expected: `VITE ... ready` and `Local: http://localhost:5173/`.
 
 **Play:** open **http://localhost:5173**. Each browser profile gets its own player and a demo balance of 1,000.00. To see the shared game, open a second window in private/incognito mode, which counts as a second player. Both windows show the same arrow, and wins from either one appear in both "Live wins" feeds.
 
-### What to do as a reviewer
+### Play a round
 
 1. **Set a stake**: type an amount or click a chip (0.50 … 25.00).
 2. **Select a block**: click any block that isn't dimmed. For a moment it shows `locking…`.
@@ -99,8 +99,8 @@ Setting `game.seed` makes the arrow path and quotes repeat exactly, which helps 
 
 | Symptom | Fix |
 |---|---|
-| `The backend needs JDK 25 or newer, but … is Java 8` | Maven would run on an old JDK. Install JDK 25 and set `JAVA_HOME` (see Prerequisites), then open a new terminal. |
-| `Unrecognized option: --sun-misc-unsafe-memory-access` or `release version 25 not supported` when running `./mvnw` directly | Same cause: the JDK is older than 25. |
+| `The backend needs JDK 27 or newer, but … is Java 8` | Maven would run on an old JDK. Install JDK 27 and set `JAVA_HOME` (see Prerequisites), then open a new terminal. |
+| `Unrecognized option: --sun-misc-unsafe-memory-access` or `release version 27 not supported` when running `./mvnw` directly | Same cause: the JDK is older than 27. |
 | `Port 8080 was already in use` | Stop the other process, or run with `-Dspring-boot.run.arguments=--server.port=8081` and start the frontend with `BACKEND_URL=http://localhost:8081 npm run dev`. |
 | Page stays on "Connecting…" / "Server unreachable, retrying…" | The backend isn't running, or isn't on 8080. The frontend proxies `/ws` to it. With `npm run dev`, check the `[api]` lines for a startup error. |
 | WebSocket closes immediately (403) when the page isn't on localhost | The backend only accepts origins listed in `ALLOWED_ORIGINS` (default `http://localhost:*,http://127.0.0.1:*`). |

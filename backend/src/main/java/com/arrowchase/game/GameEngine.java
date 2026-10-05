@@ -62,7 +62,8 @@ public final class GameEngine {
 
     /**
      * Locks the block's current multiplier for this bet and debits the stake, or rejects with a reason.
-     * Replaying the same {@code requestId} for the same player returns the original answer and changes nothing.
+     * Replaying the same {@code requestId} for the same player returns the original decision and changes nothing;
+     * the bet and balance in the answer are as they are now, so a late retry never shows the client stale state.
      */
     public PlaceBetResult placeBet(String playerId, String requestId, Cell cell, long stakeCents) {
         Objects.requireNonNull(playerId, "playerId");
@@ -70,11 +71,31 @@ public final class GameEngine {
         String idempotencyKey = playerId + '\u0000' + requestId;
         PlaceBetResult previous = processedRequests.get(idempotencyKey);
         if (previous != null) {
-            return previous;
+            return replay(playerId, previous);
         }
         PlaceBetResult result = decide(playerId, requestId, cell, stakeCents);
         processedRequests.put(idempotencyKey, result);
         return result;
+    }
+
+    private PlaceBetResult replay(String playerId, PlaceBetResult previous) {
+        long balance = balanceOf(playerId);
+        return switch (previous) {
+            case PlaceBetResult.Accepted a -> new PlaceBetResult.Accepted(currentStateOf(a.bet()), balance);
+            case PlaceBetResult.Rejected r -> new PlaceBetResult.Rejected(r.requestId(), r.reason(), balance);
+        };
+    }
+
+    /** The bet as it is now: open, recently settled, or (if long gone from history) as it was placed. */
+    private Bet currentStateOf(Bet bet) {
+        Bet open = openBets.get(bet.id());
+        if (open != null) {
+            return open;
+        }
+        return recentSettledOf(bet.playerId()).stream()
+                .filter(b -> b.id().equals(bet.id()))
+                .findFirst()
+                .orElse(bet);
     }
 
     private PlaceBetResult decide(String playerId, String requestId, Cell cell, long stakeCents) {
