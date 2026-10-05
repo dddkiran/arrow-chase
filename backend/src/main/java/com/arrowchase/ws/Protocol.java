@@ -4,6 +4,7 @@ import com.arrowchase.game.Bet;
 import com.arrowchase.game.Cell;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.List;
 
 /**
@@ -22,7 +23,11 @@ public final class Protocol {
     public sealed interface ClientMessage permits PlaceBet {
     }
 
-    public record PlaceBet(String requestId, int row, int col, long stakeCents) implements ClientMessage {
+    @Schema(description = "Bet on a block. Answered with betLocked or betRejected.")
+    public record PlaceBet(
+            @Schema(description = "Client-chosen id, 1-64 of A-Z a-z 0-9 -. Resending it returns the first answer.",
+                    requiredMode = Schema.RequiredMode.REQUIRED) String requestId,
+            int row, int col, long stakeCents) implements ClientMessage {
     }
 
     // ---- server -> client ----
@@ -43,27 +48,40 @@ public final class Protocol {
                            long minStakeCents, long maxStakeCents) {
     }
 
+    @Schema(description = "First message on every connect: a full snapshot to render from.")
     public record Welcome(String playerId, String name, long balanceCents, GameInfo game, Step state,
                           List<BetDto> openBets, List<BetDto> recentBets) implements ServerMessage {
     }
 
-    public record Step(long step, ArrowDto arrow, List<CellDto> trail, int[][] multipliersX100,
+    @Schema(description = "Broadcast to everyone after every arrow move.")
+    public record Step(long step, ArrowDto arrow, List<CellDto> trail,
+                       @Schema(description = "[row][col] live multiplier x100; 0 means the block is closed.")
+                       int[][] multipliersX100,
                        int playersOnline, List<WinDto> wins, long serverTimeMillis) implements ServerMessage {
     }
 
+    @Schema(description = "placeBet accepted: the stake is taken and the multiplier locked.")
     public record BetLocked(BetDto bet, long balanceCents) implements ServerMessage {
     }
 
-    public record BetRejected(String requestId, String reason, long balanceCents) implements ServerMessage {
+    @Schema(description = "placeBet refused; nothing was charged.")
+    public record BetRejected(String requestId,
+                              @Schema(allowableValues = {"UNKNOWN_PLAYER", "INVALID_CELL", "CELL_CLOSED",
+                                      "INVALID_STAKE", "INSUFFICIENT_FUNDS", "TOO_MANY_OPEN_BETS"})
+                              String reason,
+                              long balanceCents) implements ServerMessage {
     }
 
+    @Schema(description = "A bet won or lost.")
     public record BetSettled(BetDto bet, long balanceCents) implements ServerMessage {
     }
 
+    @Schema(description = "The last client frame could not be processed.")
     public record ErrorMessage(String message) implements ServerMessage {
     }
 
-    public record ArrowDto(int row, int col, String direction) {
+    public record ArrowDto(int row, int col,
+                           @Schema(allowableValues = {"UP", "RIGHT", "DOWN", "LEFT"}) String direction) {
     }
 
     public record CellDto(int row, int col) {
@@ -77,7 +95,10 @@ public final class Protocol {
     }
 
     public record BetDto(String id, String requestId, int row, int col, long stakeCents, int lockedMultiplierX100,
-                         long placedStep, long expiresAtStep, String status, long payoutCents, Long settledStep) {
+                         long placedStep, long expiresAtStep,
+                         @Schema(allowableValues = {"OPEN", "WON", "LOST"}) String status,
+                         long payoutCents,
+                         @Schema(description = "Null while the bet is open.") Long settledStep) {
         static BetDto of(Bet bet) {
             return new BetDto(bet.id(), bet.requestId(), bet.cell().row(), bet.cell().col(), bet.stakeCents(),
                     bet.lockedMultiplierX100(), bet.placedStep(), bet.expiresAtStep(), bet.status().name(),

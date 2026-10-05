@@ -59,6 +59,8 @@ Started ArrowChaseApplication in ~2 seconds
 
 Health check: `curl http://localhost:8080/actuator/health` returns `{"status":"UP"}`.
 
+API docs: Swagger UI at http://localhost:8080/swagger-ui.html (OpenAPI JSON at `/v3/api-docs`). It lists the actuator endpoints and, under **Schemas**, every WebSocket message on `/ws`, with the connect URL and message flow in the description at the top.
+
 **Terminal 2: frontend**
 
 ```bash

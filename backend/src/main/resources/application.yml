@@ -13,6 +13,11 @@ management:
       exposure:
         include: health,info,metrics
 
+springdoc:
+  show-actuator: true       # the actuator endpoints are the only HTTP API; the game itself is the /ws WebSocket
+  swagger-ui:
+    path: /swagger-ui.html
+
 game:
   rows: 8
   cols: 8
